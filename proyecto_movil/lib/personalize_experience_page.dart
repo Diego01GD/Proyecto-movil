@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'main.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
@@ -10,13 +7,14 @@ class PersonalizeExperiencePage extends StatefulWidget {
   const PersonalizeExperiencePage({super.key});
 
   @override
-  State<PersonalizeExperiencePage> createState() => _PersonalizeExperiencePageState();
+  State<PersonalizeExperiencePage> createState() =>
+      _PersonalizeExperiencePageState();
 }
 
 class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
   final _formKey = GlobalKey<FormState>();
-  XFile? _imageFile;
-  final ImagePicker _picker = ImagePicker();
+  final List<Map<String, dynamic>> _skillCatalog = [];
+  final List<Map<String, dynamic>> _timeSlotsCatalog = [];
 
   @override
   void initState() {
@@ -25,7 +23,9 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (supabase.auth.currentUser == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sesión requerida. Por favor inicia sesión.')),
+          const SnackBar(
+            content: Text('Sesión requerida. Por favor inicia sesión.'),
+          ),
         );
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => LoginPage()),
@@ -33,67 +33,147 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
         );
       }
     });
+    _loadCatalogs();
   }
 
-  Future<void> _pickImage() async {
+  @override
+  void dispose() {
+    _commentController.dispose();
+    _gpaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCatalogs() async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1800,
-        maxHeight: 1800,
-      );
-      if (pickedFile != null) {
-        setState(() {
-          _imageFile = pickedFile;
-        });
-      }
+      final catalogResponse = await supabase
+          .from('skills')
+          .select('id, name, category');
+      final timeSlotsResponse = await supabase
+          .from('time_slots')
+          .select('id, range, shift');
+
+      final catalogRows = (catalogResponse as List)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final timeSlotRows = (timeSlotsResponse as List)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _skillCatalog
+          ..clear()
+          ..addAll(
+            catalogRows.map(
+              (row) => {
+                'id': row['id']?.toString() ?? '',
+                'name': row['name']?.toString() ?? '',
+                'category': row['category']?.toString() ?? '',
+              },
+            ),
+          );
+        _timeSlotsCatalog
+          ..clear()
+          ..addAll(
+            timeSlotRows.map(
+              (row) => {
+                'id': row['id']?.toString() ?? '',
+                'range': row['range']?.toString() ?? '',
+                'shift': row['shift']?.toString() ?? '',
+              },
+            ),
+          );
+      });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al seleccionar imagen: $e')),
-      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error cargando catálogos: $e')));
     }
   }
-  
+
   // Data lists for dynamic fields
-  List<Map<String, String?>> skillsPossessed = [{ 'category': null, 'skill': null, 'level': 'Básico' }];
-  List<Map<String, String?>> skillsToLearn = [{ 'category': null, 'skill': null }];
-  List<Map<String, String?>> availability = [{ 'shift': null, 'hour': null, 'day': null }];
-  
+  List<Map<String, String?>> skillsPossessed = [
+    {'category': null, 'skill': null, 'level': 'Básico'},
+  ];
+  List<Map<String, String?>> skillsToLearn = [
+    {'category': null, 'skill': null},
+  ];
+  List<Map<String, String?>> availability = [
+    {'day': null, 'hour': null},
+  ];
+
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _gpaController = TextEditingController();
 
-  // Mock data for dropdowns mapping categories to skills
-  final Map<String, List<String>> categorySkills = {
-    'Programación': ['Flutter', 'Python', 'Java', 'Web Development', 'Data Science'],
-    'Idiomas': ['Inglés', 'Francés', 'Alemán', 'Chino Mandarín', 'Italiano'],
-    'Diseño': ['UI/UX Design', 'Graphic Design', 'Figma', 'Photoshop', 'Adobe Illustrator'],
-    'Música': ['Piano', 'Guitarra', 'Canto', 'Teoría Musical', 'Producción Musical'],
-    'Matemáticas': ['Cálculo', 'Álgebra', 'Estadística', 'Trigonometría'],
-    'Comunicación': ['Oratoria', 'Redacción', 'Relaciones Públicas', 'Storytelling'],
-    'Deportes': ['Fútbol', 'Básquetbol', 'Natación', 'Yoga', 'Entrenamiento Funcional'],
-    'Herramientas digitales': ['Excel', 'Word', 'PowerPoint', 'Google Workspace', 'Notion'],
-  };
+  List<String> get _skillCategories {
+    final categories = _skillCatalog
+        .map((skill) => skill['category']?.toString() ?? '')
+        .where((category) => category.isNotEmpty)
+        .toSet()
+        .toList();
+    categories.sort();
+    return categories;
+  }
+
+  List<Map<String, dynamic>> _skillsForCategory(String? category) {
+    if (category == null || category.isEmpty) return [];
+    return _skillCatalog
+        .where((skill) => skill['category'] == category)
+        .toList();
+  }
+
+  String? _findSkillId(String? category, String? skillName) {
+    if (category == null || skillName == null) return null;
+    for (final skill in _skillCatalog) {
+      if (skill['category'] == category && skill['name'] == skillName) {
+        return skill['id']?.toString();
+      }
+    }
+    return null;
+  }
+
+  List<String> get _timeSlotRanges {
+    return _timeSlotsCatalog
+        .map((slot) => slot['range']?.toString() ?? '')
+        .where((range) => range.isNotEmpty)
+        .toList();
+  }
+
+  String? _findTimeSlotId(String? range) {
+    if (range == null) return null;
+    for (final slot in _timeSlotsCatalog) {
+      if (slot['range'] == range) {
+        return slot['id']?.toString();
+      }
+    }
+    return null;
+  }
 
   final List<String> levels = ['Básico', 'Intermedio', 'Avanzado'];
-  final List<String> shifts = ['Mañana', 'Tarde', 'Noche'];
-  final List<String> hoursString = ['08:00', '10:00', '14:00', '16:00', '18:00', '20:00'];
-  final List<String> days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  final List<String> days = [
+    'Lunes',
+    'Martes',
+    'Miércoles',
+    'Jueves',
+    'Viernes',
+  ];
 
   void _addSkillPossessed() {
     setState(() {
-      skillsPossessed.add({ 'category': null, 'skill': null, 'level': 'Básico' });
+      skillsPossessed.add({'category': null, 'skill': null, 'level': 'Básico'});
     });
   }
 
   void _addSkillToLearn() {
     setState(() {
-      skillsToLearn.add({ 'category': null, 'skill': null });
+      skillsToLearn.add({'category': null, 'skill': null});
     });
   }
 
   void _addAvailability() {
     setState(() {
-      availability.add({ 'shift': null, 'hour': null, 'day': null });
+      availability.add({'day': null, 'hour': null});
     });
   }
 
@@ -101,31 +181,37 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
     print('**** BUTTON PRESSED ****');
     if (_formKey.currentState!.validate()) {
       print('**** FORM IS VALID ****');
-      
+
       // Validar que haya al menos un skill para enseñar y uno para aprender
-      final hasSkillsToTeach = skillsPossessed.any((skill) => 
-        skill['category'] != null && skill['skill'] != null);
-      final hasSkillsToLearn = skillsToLearn.any((skill) => 
-        skill['category'] != null && skill['skill'] != null);
-      
+      final hasSkillsToTeach = skillsPossessed.any(
+        (skill) => skill['category'] != null && skill['skill'] != null,
+      );
+      final hasSkillsToLearn = skillsToLearn.any(
+        (skill) => skill['category'] != null && skill['skill'] != null,
+      );
+
       if (!hasSkillsToTeach || !hasSkillsToLearn) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Por favor, selecciona al menos un skill para enseñar y uno para aprender'),
+            content: Text(
+              'Por favor, selecciona al menos un skill para enseñar y uno para aprender',
+            ),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
-      
+
       try {
         final userId = supabase.auth.currentUser?.id;
         print('**** USER ID: $userId');
         if (userId == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text(
-                    'Error: No se encontró sesión de usuario. Por favor, inicia sesión de nuevo.')),
+              content: Text(
+                'Error: No se encontró sesión de usuario. Por favor, inicia sesión de nuevo.',
+              ),
+            ),
           );
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => LoginPage()),
@@ -134,12 +220,66 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
           return;
         }
 
-        // Marcamos el perfil como completo en Supabase
+        final teachRows = <Map<String, dynamic>>[];
+        for (final skill in skillsPossessed) {
+          final category = skill['category'];
+          final name = skill['skill'];
+          final skillId = _findSkillId(category, name);
+          if (skillId == null) {
+            throw Exception(
+              'No se encontró la habilidad para enseñar "$name" en la categoría "$category"',
+            );
+          }
+          teachRows.add({
+            'profile_id': userId,
+            'skill_id': skillId,
+            'level': skill['level'] ?? 'Básico',
+          });
+        }
+
+        final learnRows = <Map<String, dynamic>>[];
+        for (final skill in skillsToLearn) {
+          final category = skill['category'];
+          final name = skill['skill'];
+          final skillId = _findSkillId(category, name);
+          if (skillId == null) {
+            throw Exception(
+              'No se encontró la habilidad para aprender "$name" en la categoría "$category"',
+            );
+          }
+          learnRows.add({'profile_id': userId, 'skill_id': skillId});
+        }
+
+        final availabilityRows = <Map<String, dynamic>>[];
+        for (final slot in availability) {
+          final day = slot['day'];
+          final range = slot['hour'];
+          final slotId = _findTimeSlotId(range);
+          if (day == null || day.isEmpty || slotId == null) {
+            throw Exception('Selecciona un día y un horario válidos');
+          }
+          availabilityRows.add({
+            'profile_id': userId,
+            'day': day,
+            'slot_id': slotId,
+            'comment': _commentController.text.trim().isEmpty
+                ? null
+                : _commentController.text.trim(),
+          });
+        }
+
         print('**** UPDATING SUPABASE ****');
-        await supabase.from('profiles').update({
-          'is_complete': true,
-          'gpa': double.tryParse(_gpaController.text) ?? 0.0,
-        }).eq('id', userId);
+        await supabase
+            .from('profiles')
+            .update({
+              'is_complete': true,
+              'gpa': double.tryParse(_gpaController.text) ?? 0.0,
+            })
+            .eq('id', userId);
+
+        await supabase.from('user_skills').insert(teachRows);
+        await supabase.from('user_interests').insert(learnRows);
+        await supabase.from('user_availability').insert(availabilityRows);
         print('**** SUPABASE UPDATE SUCCESSFUL ****');
 
         if (mounted) {
@@ -155,16 +295,17 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
       } catch (e) {
         print('**** ERROR IN _saveAndContinue: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al guardar datos: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error al guardar datos: $e')));
         }
       }
     } else {
       print('**** FORM IS INVALID ****');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Por favor, completa todos los campos requeridos.')),
+          content: Text('Por favor, completa todos los campos requeridos.'),
+        ),
       );
     }
   }
@@ -216,56 +357,43 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 32),
-                      
-                      // Profile Photo Upload Placeholder
-                      GestureDetector(
-                        onTap: _pickImage,
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFF2E7DAB), width: 2),
-                                image: _imageFile != null
-                                    ? DecorationImage(
-                                        image: kIsWeb
-                                            ? NetworkImage(_imageFile!.path)
-                                            : FileImage(File(_imageFile!.path)) as ImageProvider,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: _imageFile == null
-                                  ? const Icon(Icons.camera_alt_outlined, size: 40, color: Color(0xFF2E7DAB))
-                                  : null,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _imageFile == null ? 'HAZ CLIC PARA SUBIR TU FOTO' : 'CAMBIAR FOTO',
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2E7DAB)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
+
                       const Divider(),
                       const SizedBox(height: 16),
 
                       _buildSectionTitle('¿Qué habilidades posees?'),
-                      const Text('Selecciona lo que puedes enseñar a otros', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const Text(
+                        'Selecciona lo que puedes enseñar a otros',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
                       const SizedBox(height: 16),
-                      ...skillsPossessed.asMap().entries.map((entry) => _buildSkillPossessedRow(entry.key, isMobile)).toList(),
-                      
+                      ...skillsPossessed
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) =>
+                                _buildSkillPossessedRow(entry.key, isMobile),
+                          )
+                          .toList(),
+
                       const SizedBox(height: 32),
                       const Divider(),
                       const SizedBox(height: 16),
 
                       _buildSectionTitle('¿Qué quieres aprender?'),
-                      const Text('Habilidades que buscas desarrollar', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const Text(
+                        'Habilidades que buscas desarrollar',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
                       const SizedBox(height: 16),
-                      ...skillsToLearn.asMap().entries.map((entry) => _buildSkillToLearnRow(entry.key, isMobile)).toList(),
+                      ...skillsToLearn
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) =>
+                                _buildSkillToLearnRow(entry.key, isMobile),
+                          )
+                          .toList(),
 
                       const SizedBox(height: 32),
                       const Divider(),
@@ -273,11 +401,21 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
 
                       _buildSectionTitle('Disponibilidad Horaria'),
                       const SizedBox(height: 16),
-                      ...availability.asMap().entries.map((entry) => _buildAvailabilityRow(entry.key, isMobile)).toList(),
+                      ...availability
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) =>
+                                _buildAvailabilityRow(entry.key, isMobile),
+                          )
+                          .toList(),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _commentController,
-                        decoration: _inputDecoration('COMENTARIO (OPCIONAL)', 'Añade un comentario...'),
+                        decoration: _inputDecoration(
+                          'COMENTARIO (OPCIONAL)',
+                          'Añade un comentario...',
+                        ),
                         maxLines: 2,
                       ),
 
@@ -289,10 +427,14 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _gpaController,
-                        decoration: _inputDecoration('PROMEDIO GENERAL', 'Ej: 8.50'),
+                        decoration: _inputDecoration(
+                          'PROMEDIO GENERAL',
+                          'Ej: 8.50',
+                        ),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Campo requerido';
+                          if (value == null || value.isEmpty)
+                            return 'Campo requerido';
                           return null;
                         },
                       ),
@@ -306,9 +448,17 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2E7DAB),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: const Text('Guardar y Continuar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Guardar y Continuar',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -327,7 +477,11 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
       alignment: Alignment.centerLeft,
       child: Text(
         title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E3A5F)),
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1E3A5F),
+        ),
       ),
     );
   }
@@ -336,7 +490,11 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E3A5F)),
+      labelStyle: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF1E3A5F),
+      ),
       floatingLabelBehavior: FloatingLabelBehavior.always,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -345,7 +503,7 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
 
   Widget _buildSkillPossessedRow(int index, bool isMobile) {
     String? selectedCategory = skillsPossessed[index]['category'];
-    List<String> availableSkills = selectedCategory != null ? categorySkills[selectedCategory]! : [];
+    final availableSkills = _skillsForCategory(selectedCategory);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
@@ -360,11 +518,19 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
             child: DropdownButtonFormField<String>(
               decoration: _inputDecoration('CATEGORÍA', 'Selecciona categoría'),
               value: selectedCategory,
-              items: categorySkills.keys.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
+              items: _skillCategories
+                  .map(
+                    (c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c, style: const TextStyle(fontSize: 12)),
+                    ),
+                  )
+                  .toList(),
               onChanged: (val) {
                 setState(() {
                   skillsPossessed[index]['category'] = val;
-                  skillsPossessed[index]['skill'] = null; // Reiniciar habilidad al cambiar categoría
+                  skillsPossessed[index]['skill'] =
+                      null; // Reiniciar habilidad al cambiar categoría
                 });
               },
               validator: (val) => val == null ? 'Requerido' : null,
@@ -375,8 +541,19 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
             child: DropdownButtonFormField<String>(
               decoration: _inputDecoration('HABILIDAD', 'Selecciona habilidad'),
               value: skillsPossessed[index]['skill'],
-              items: availableSkills.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12)))).toList(),
-              onChanged: (val) => setState(() => skillsPossessed[index]['skill'] = val),
+              items: availableSkills
+                  .map(
+                    (s) => DropdownMenuItem(
+                      value: s['name']?.toString(),
+                      child: Text(
+                        s['name']?.toString() ?? '',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) =>
+                  setState(() => skillsPossessed[index]['skill'] = val),
               validator: (val) => val == null ? 'Requerido' : null,
             ),
           ),
@@ -385,15 +562,27 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
             child: DropdownButtonFormField<String>(
               decoration: _inputDecoration('DOMINIO', 'Básico'),
               value: skillsPossessed[index]['level'],
-              items: levels.map((l) => DropdownMenuItem(value: l, child: Text(l, style: const TextStyle(fontSize: 12)))).toList(),
-              onChanged: (val) => setState(() => skillsPossessed[index]['level'] = val),
+              items: levels
+                  .map(
+                    (l) => DropdownMenuItem(
+                      value: l,
+                      child: Text(l, style: const TextStyle(fontSize: 12)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) =>
+                  setState(() => skillsPossessed[index]['level'] = val),
               validator: (val) => val == null ? 'Requerido' : null,
             ),
           ),
           if (index == skillsPossessed.length - 1)
             IconButton(
               onPressed: _addSkillPossessed,
-              icon: const Icon(Icons.add_circle, color: Color(0xFF2E7DAB), size: 32),
+              icon: const Icon(
+                Icons.add_circle,
+                color: Color(0xFF2E7DAB),
+                size: 32,
+              ),
             ),
         ],
       ),
@@ -402,7 +591,7 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
 
   Widget _buildSkillToLearnRow(int index, bool isMobile) {
     String? selectedCategory = skillsToLearn[index]['category'];
-    List<String> availableSkills = selectedCategory != null ? categorySkills[selectedCategory]! : [];
+    final availableSkills = _skillsForCategory(selectedCategory);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
@@ -417,7 +606,14 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
             child: DropdownButtonFormField<String>(
               decoration: _inputDecoration('CATEGORÍA', 'Selecciona categoría'),
               value: selectedCategory,
-              items: categorySkills.keys.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12)))).toList(),
+              items: _skillCategories
+                  .map(
+                    (c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c, style: const TextStyle(fontSize: 12)),
+                    ),
+                  )
+                  .toList(),
               onChanged: (val) {
                 setState(() {
                   skillsToLearn[index]['category'] = val;
@@ -432,15 +628,30 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
             child: DropdownButtonFormField<String>(
               decoration: _inputDecoration('HABILIDAD', 'Selecciona habilidad'),
               value: skillsToLearn[index]['skill'],
-              items: availableSkills.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12)))).toList(),
-              onChanged: (val) => setState(() => skillsToLearn[index]['skill'] = val),
+              items: availableSkills
+                  .map(
+                    (s) => DropdownMenuItem(
+                      value: s['name']?.toString(),
+                      child: Text(
+                        s['name']?.toString() ?? '',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) =>
+                  setState(() => skillsToLearn[index]['skill'] = val),
               validator: (val) => val == null ? 'Requerido' : null,
             ),
           ),
           if (index == skillsToLearn.length - 1)
             IconButton(
               onPressed: _addSkillToLearn,
-              icon: const Icon(Icons.add_circle, color: Color(0xFF2E7DAB), size: 32),
+              icon: const Icon(
+                Icons.add_circle,
+                color: Color(0xFF2E7DAB),
+                size: 32,
+              ),
             ),
         ],
       ),
@@ -448,6 +659,8 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
   }
 
   Widget _buildAvailabilityRow(int index, bool isMobile) {
+    final selectedDay = availability[index]['day'];
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Wrap(
@@ -457,36 +670,41 @@ class _PersonalizeExperiencePageState extends State<PersonalizeExperiencePage> {
         crossAxisAlignment: WrapCrossAlignment.end,
         children: [
           SizedBox(
-            width: isMobile ? double.infinity : 130,
-            child: DropdownButtonFormField<String>(
-              decoration: _inputDecoration('TURNO', 'Selecciona un turno'),
-              items: shifts.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (val) => availability[index]['shift'] = val,
-              validator: (val) => val == null ? 'Requerido' : null,
-            ),
-          ),
-          SizedBox(
-            width: isMobile ? double.infinity : 130,
-            child: DropdownButtonFormField<String>(
-              decoration: _inputDecoration('HORA', 'Selecciona hora'),
-              items: hoursString.map((h) => DropdownMenuItem(value: h, child: Text(h))).toList(),
-              onChanged: (val) => availability[index]['hour'] = val,
-              validator: (val) => val == null ? 'Requerido' : null,
-            ),
-          ),
-          SizedBox(
-            width: isMobile ? double.infinity : 130,
+            width: isMobile ? double.infinity : 180,
             child: DropdownButtonFormField<String>(
               decoration: _inputDecoration('DÍA', 'Selecciona día'),
-              items: days.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-              onChanged: (val) => availability[index]['day'] = val,
+              value: selectedDay,
+              items: days
+                  .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                  .toList(),
+              onChanged: (val) =>
+                  setState(() => availability[index]['day'] = val),
+              validator: (val) => val == null ? 'Requerido' : null,
+            ),
+          ),
+          SizedBox(
+            width: isMobile ? double.infinity : 180,
+            child: DropdownButtonFormField<String>(
+              decoration: _inputDecoration('HORARIO', 'Selecciona horario'),
+              items: _timeSlotRanges
+                  .map(
+                    (range) =>
+                        DropdownMenuItem(value: range, child: Text(range)),
+                  )
+                  .toList(),
+              onChanged: (val) =>
+                  setState(() => availability[index]['hour'] = val),
               validator: (val) => val == null ? 'Requerido' : null,
             ),
           ),
           if (index == availability.length - 1)
             IconButton(
               onPressed: _addAvailability,
-              icon: const Icon(Icons.add_circle, color: Color(0xFF2E7DAB), size: 32),
+              icon: const Icon(
+                Icons.add_circle,
+                color: Color(0xFF2E7DAB),
+                size: 32,
+              ),
             ),
         ],
       ),

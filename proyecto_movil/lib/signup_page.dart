@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main.dart';
 import 'login_page.dart';
 
@@ -17,7 +16,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   String? _selectedSemester;
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -38,25 +37,47 @@ class _SignUpPageState extends State<SignUpPage> {
     });
   }
 
-  final List<String> _semesters = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10+'];
+  final List<String> _semesters = [
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '10+',
+  ];
   final List<String> _interests = [
-    'Programación', 'Idiomas', 'Diseño',
-    'Música', 'Matemáticas', 'Comunicación',
-    'Deportes', 'Herramientas digitales'
+    'Programación',
+    'Idiomas',
+    'Diseño',
+    'Música',
+    'Matemáticas',
+    'Comunicación',
+    'Deportes',
+    'Herramientas digitales',
   ];
   final List<String> _selectedInterests = [];
 
   Future<void> signUp() async {
     if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Las contraseñas no coinciden'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Las contraseñas no coinciden'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
 
     if (!_hasMinLength || !_hasUppercase || !_hasNumber || !_hasSpecialChar) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La contraseña no cumple con los requisitos'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('La contraseña no cumple con los requisitos'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -66,19 +87,31 @@ class _SignUpPageState extends State<SignUpPage> {
       final response = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        data: {
-          'full_name': _nameController.text.trim(),
-          'career': _careerController.text.trim(),
-          'student_id': _idController.text.trim(),
-          'semester': _selectedSemester,
-          'interests': _selectedInterests,
-        },
       );
+
+      final userId = response.user?.id;
+      if (userId == null) {
+        throw Exception('No se pudo crear el usuario en auth.users');
+      }
+
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'full_name': _nameController.text.trim(),
+        'career': _careerController.text.trim(),
+        'student_id': _idController.text.trim(),
+        'semester': _selectedSemester,
+        'interests': _selectedInterests.isEmpty ? null : _selectedInterests,
+        'is_complete': false,
+      });
+
       if (mounted && response.user != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registro exitoso. Revisa tu correo.')),
         );
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -103,7 +136,10 @@ class _SignUpPageState extends State<SignUpPage> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 40,
+                ),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 800),
@@ -114,7 +150,11 @@ class _SignUpPageState extends State<SignUpPage> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5)),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
                           ],
                         ),
                         child: Padding(
@@ -124,87 +164,168 @@ class _SignUpPageState extends State<SignUpPage> {
                             children: [
                               const Text(
                                 'Registrar nueva cuenta',
-                                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Georgia', color: Color(0xFF1E3A5F)),
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Georgia',
+                                  color: Color(0xFF1E3A5F),
+                                ),
                               ),
                               const SizedBox(height: 30),
 
                               _buildResponsiveRow(isMobile, [
-                                _buildField('NOMBRE COMPLETO *', _nameController, hint: 'Tu nombre'),
-                                _buildField('CARRERA *', _careerController, hint: 'Tu carrera'),
+                                _buildField(
+                                  'NOMBRE COMPLETO *',
+                                  _nameController,
+                                  hint: 'Tu nombre',
+                                ),
+                                _buildField(
+                                  'CARRERA *',
+                                  _careerController,
+                                  hint: 'Tu carrera',
+                                ),
                               ]),
-                              
+
                               _buildResponsiveRow(isMobile, [
-                                _buildField('MATRÍCULA *', _idController, hint: 'Tu matrícula'),
+                                _buildField(
+                                  'MATRÍCULA *',
+                                  _idController,
+                                  hint: 'Tu matrícula',
+                                ),
                                 _buildDropdownField('SEMESTRE ACTUAL *'),
                               ]),
 
-                              _buildField('CORREO INSTITUCIONAL *', _emailController, hint: 'nombre@universidad.edu'),
+                              _buildField(
+                                'CORREO INSTITUCIONAL *',
+                                _emailController,
+                                hint: 'nombre@universidad.edu',
+                              ),
 
-                              _buildField('CONTRASEÑA *', _passwordController, isPassword: true, 
-                                obscureText: _obscurePassword, 
-                                onToggle: () => setState(() => _obscurePassword = !_obscurePassword)),
+                              _buildField(
+                                'CONTRASEÑA *',
+                                _passwordController,
+                                isPassword: true,
+                                obscureText: _obscurePassword,
+                                onToggle: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                              ),
 
                               _buildPasswordStrengthIndicator(),
 
-                              _buildField('CONFIRMAR CONTRASEÑA *', _confirmPasswordController, isPassword: true,
+                              _buildField(
+                                'CONFIRMAR CONTRASEÑA *',
+                                _confirmPasswordController,
+                                isPassword: true,
                                 obscureText: _obscureConfirmPassword,
-                                onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword)),
+                                onToggle: () => setState(
+                                  () => _obscureConfirmPassword =
+                                      !_obscureConfirmPassword,
+                                ),
+                              ),
 
                               const SizedBox(height: 30),
-                              const Text('INTERESES ACADEMICOS O PERSONALES', 
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF2E7DAB))),
+                              const Text(
+                                'INTERESES ACADEMICOS O PERSONALES',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF2E7DAB),
+                                ),
+                              ),
                               const SizedBox(height: 20),
 
                               Wrap(
                                 spacing: 20,
                                 runSpacing: 10,
-                                children: _interests.map((interest) => SizedBox(
-                                  width: isMobile ? size.width * 0.35 : 180,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Checkbox(
-                                        value: _selectedInterests.contains(interest),
-                                        onChanged: (val) {
-                                          setState(() {
-                                            if (val!) _selectedInterests.add(interest);
-                                            else _selectedInterests.remove(interest);
-                                          });
-                                        },
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          interest, 
-                                          style: const TextStyle(fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
+                                children: _interests
+                                    .map(
+                                      (interest) => SizedBox(
+                                        width: isMobile
+                                            ? size.width * 0.35
+                                            : 180,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Checkbox(
+                                              value: _selectedInterests
+                                                  .contains(interest),
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  if (val!)
+                                                    _selectedInterests.add(
+                                                      interest,
+                                                    );
+                                                  else
+                                                    _selectedInterests.remove(
+                                                      interest,
+                                                    );
+                                                });
+                                              },
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                interest,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                )).toList(),
+                                    )
+                                    .toList(),
                               ),
 
                               const SizedBox(height: 40),
 
                               Center(
                                 child: ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 300),
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 300,
+                                  ),
                                   child: SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton(
                                       onPressed: _isLoading ? null : signUp,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFF0F4F8).withOpacity(0.8),
-                                        foregroundColor: const Color(0xFF1E3A5F),
-                                        padding: const EdgeInsets.symmetric(vertical: 18),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        backgroundColor: const Color(
+                                          0xFFF0F4F8,
+                                        ).withOpacity(0.8),
+                                        foregroundColor: const Color(
+                                          0xFF1E3A5F,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 18,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
                                         elevation: 0,
                                       ),
                                       child: _isLoading
-                                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                          : const Text('Registrar cuenta', style: TextStyle(fontWeight: FontWeight.bold)),
+                                          ? const SizedBox(
+                                              height: 20,
+                                              width: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Text(
+                                              'Registrar cuenta',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -213,10 +334,26 @@ class _SignUpPageState extends State<SignUpPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Text('Ya tengo cuenta - ', style: TextStyle(fontSize: 13)),
+                                  const Text(
+                                    'Ya tengo cuenta - ',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
                                   InkWell(
-                                    onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginPage())),
-                                    child: const Text('Iniciar sesión', style: TextStyle(fontSize: 13, color: Color(0xFF2E7DAB), fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                                    onTap: () => Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const LoginPage(),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Iniciar sesión',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF2E7DAB),
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -239,30 +376,70 @@ class _SignUpPageState extends State<SignUpPage> {
     if (isMobile) return Column(children: children);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: children.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: c))).toList(),
+      children: children
+          .map(
+            (c) => Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: c,
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {String? hint, bool isPassword = false, bool? obscureText, VoidCallback? onToggle}) {
+  Widget _buildField(
+    String label,
+    TextEditingController controller, {
+    String? hint,
+    bool isPassword = false,
+    bool? obscureText,
+    VoidCallback? onToggle,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1E3A5F))),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: controller,
             obscureText: isPassword ? (obscureText ?? true) : false,
-            onChanged: label.contains('CONTRASEÑA') && !label.contains('CONFIRMAR') ? _validatePassword : null,
+            onChanged:
+                label.contains('CONTRASEÑA') && !label.contains('CONFIRMAR')
+                ? _validatePassword
+                : null,
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
               filled: true,
               fillColor: const Color(0xFFDDE7EE).withOpacity(0.5),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              suffixIcon: isPassword ? IconButton(icon: Icon(obscureText! ? Icons.visibility_off : Icons.visibility, size: 18), onPressed: onToggle) : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              suffixIcon: isPassword
+                  ? IconButton(
+                      icon: Icon(
+                        obscureText! ? Icons.visibility_off : Icons.visibility,
+                        size: 18,
+                      ),
+                      onPressed: onToggle,
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
         ],
@@ -276,17 +453,32 @@ class _SignUpPageState extends State<SignUpPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1E3A5F))),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+          ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(color: const Color(0xFFDDE7EE).withOpacity(0.5), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDDE7EE).withOpacity(0.5),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _selectedSemester,
-                hint: const Text('Selecciona semestre', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                hint: const Text(
+                  'Selecciona semestre',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
                 isExpanded: true,
-                items: _semesters.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                items: _semesters
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
                 onChanged: (val) => setState(() => _selectedSemester = val),
               ),
             ),
@@ -297,10 +489,14 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Widget _buildPasswordStrengthIndicator() {
-    int strengthCount = (_hasMinLength ? 1 : 0) + (_hasUppercase ? 1 : 0) + (_hasNumber ? 1 : 0) + (_hasSpecialChar ? 1 : 0);
+    int strengthCount =
+        (_hasMinLength ? 1 : 0) +
+        (_hasUppercase ? 1 : 0) +
+        (_hasNumber ? 1 : 0) +
+        (_hasSpecialChar ? 1 : 0);
     String strengthText = 'DÉBIL';
     Color strengthColor = Colors.red;
-    
+
     if (strengthCount == 4) {
       strengthText = 'FUERTE';
       strengthColor = Colors.green;
@@ -312,14 +508,27 @@ class _SignUpPageState extends State<SignUpPage> {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Fuerza:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              Text(strengthText, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: strengthColor)),
+              const Text(
+                'Fuerza:',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                strengthText,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: strengthColor,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
